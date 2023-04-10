@@ -1,82 +1,36 @@
 package main
 
 import (
-	"context"
-	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
-	"time"
-)
-
-const (
-    interval int = 30
-    conBaseUrl string = "https://api.congress.gov/v3"
 )
 
 func main() {
-    conKey := os.Getenv("CONKEY")
-    if len(conKey) == 0 {
-        log.Fatalln("Congress API Key \"CONKEY\" not set.")
+    //check and validate api key
+    congressApiKey := os.Getenv("CONGRESS_API_KEY")
+    if congressApiKey == "" {
+        log.Fatalln("CONGRESS_API_KEY env variable is not set")
     }
 
-    lastBill := Bill{}
-
-    ctx := context.Background()
-    timeout := 30 * time.Second
-    reqContext, cancel := context.WithTimeout(ctx, timeout)
-    defer cancel()
-    billsUrl := fmt.Sprintf("%s/bill?limit=1", conBaseUrl)
-    m, err := Get[CongressBills](
-        reqContext, 
-        billsUrl, 
-        conKey,
-    )
-
+    client := &http.Client{}
+    req, err := http.NewRequest("GET", "https://api.congress.gov/v3/bill", nil)
     if err != nil {
-        log.Fatal(err)
+        log.Fatalln(err)
     }
 
-    firstBill := m.Bills[0]
-    if firstBill.Number != lastBill.Number {
-        //get bill details
-        billUrl := fmt.Sprintf(
-            "%s/bill/%d/%s/%s",
-            conBaseUrl,
-            firstBill.Congress,
-            firstBill.Type,
-            firstBill.Number,
-        )
-
-        m, err := Get[BillRequest](
-            reqContext,
-            billUrl,
-            conKey,
-        )
-
-        if err != nil {
-            log.Fatalln(err)
-        }
-
-        lastBill = m.Bill
-        textUrl := fmt.Sprintf(
-            "%s/bill/%d/%s/%s/text",
-            conBaseUrl,
-            firstBill.Congress,
-            firstBill.Type,
-            firstBill.Number,
-        )
-
-        var t TextRequest
-        t, err = Get[TextRequest](
-            reqContext,
-            textUrl,
-            conKey,
-        )
-
-        if err != nil {
-            log.Fatalln(err)
-        }
-
-        log.Printf("%#v\n", t)
+    req.Header.Add("X-Api-Key", congressApiKey)
+    resp, err := client.Do(req)
+    if err != nil {
+        log.Fatalln(err)
     }
+
+    defer resp.Body.Close()
+    b, err := io.ReadAll(resp.Body)
+    if err != nil {
+        log.Fatalln(err)
+    }
+
+    log.Println(string(b))
 }
